@@ -9,28 +9,24 @@
 #include <X11/Xutil.h>
 #include <X11/Xatom.h>
 
-#define min(a, b) ((int32_t) a > (int32_t) b ? b : a)
-#define abs(a) ((int32_t) a > 0 ? a : -((int32_t) a))
-
 struct s_select {
-	Display	*dsp;
-	Visual	*vi;
-	Window	root_id;
-	Window	win_id;
-	Atom	wm_delete_window;
-	Atom	_net_wm_state;
-	Atom	_net_wm_state_above;
+	Display		*dsp;
+	Visual		*vi;
+	Window		root_id;
+	Window		win_id;
+	Atom		wm_delete_window;
+	Atom		_net_wm_state;
+	Atom		_net_wm_state_above;
 
-	int32_t	x0;
-	int32_t	y0;
-	int32_t	x1;
-	int32_t	y1;
+	uint32_t	x0;
+	uint32_t	y0;
+	uint32_t	x1;
+	uint32_t	y1;
 };
 
-bool	x_select(int32_t *, int32_t *, int32_t *, int32_t *, uint8_t **);
+bool	x_select(uint32_t *, uint32_t *, uint32_t *, uint32_t *);
 bool	x_selectCreate(struct s_select *);
 bool	x_selectPollEvents(struct s_select *);
-bool	x_selectGetPixelData(struct s_select *, uint8_t **);
 bool	x_selectTerminate(struct s_select *);
 
 /* TODO(yakub):
@@ -47,21 +43,21 @@ bool	x_selectTerminate(struct s_select *);
  * */
 int	main(int ac, char **av) {
 	uint32_t	*d_int;   /* d_int - data (int) */
-	uint8_t		*d_char;   /* d_char - data (char) */
-	int32_t		x0, x1,   /* x0 - start x, x1 - end x */
+	uint32_t	x0, x1,   /* x0 - start x, x1 - end x */
 				y0, y1;   /* y0 - start y, y1 - end y */
 
 	x0 = x1 = y0 = y1 = 0;
 	d_int = 0;
-	d_char = 0;
-	if (!x_select(&x0, &y0, &x1, &y1, &d_char)) {
+	if (!x_select(&x0, &y0, &x1, &y1)) {
 		return (1);
 	}
 
 	/* TODO(yakub):
 	 *  We should print only the filtered pixels
 	 * */
-	d_int = (uint32_t *) d_char;
+	d_int = (uint32_t *) 0;
+	
+#if (false)
 	for (size_t i = 0; d_int[i]; i++) {
 		bool	skip;
 
@@ -76,7 +72,11 @@ int	main(int ac, char **av) {
 
 		printf("%x\n", d_int[i]);
 	}
-	if (d_char) { free(d_char), d_char = 0; }
+#else
+	printf("%dx%d-%dx%d\n", x0, y0, x1, y1);
+#endif
+
+	if (d_int) { free(d_int), d_int = 0; }
 	return (0);
 }
 
@@ -85,14 +85,12 @@ int	main(int ac, char **av) {
  * - y0: returns the Y coordinate of where the selection begun;
  * - x1: returns the X coordinate of where the selection finished;
  * - y1: returns the Y coordinate of where the selection finished;
- * - d:  returns an RGBA pixel data of the selected region;
  * */
-bool	x_select(int32_t *x0, int32_t *y0, int32_t *x1, int32_t *y1, uint8_t **d) {
+bool	x_select(uint32_t *x0, uint32_t *y0, uint32_t *x1, uint32_t *y1) {
 	struct s_select	s = { 0 };
 
 	if (!x_selectCreate(&s)) { return (false); }
 	while (x_selectPollEvents(&s)) { }
-	if (!x_selectGetPixelData(&s, d)) { return (false); }
 	if (!x_selectTerminate(&s)) { return (false); }
 
 	if (x0) { *x0 = s.x0; }
@@ -188,46 +186,6 @@ bool	x_selectPollEvents(struct s_select *s) {
 			}
 		}
 	}
-	return (true);
-}
-
-
-bool	x_selectGetPixelData(struct s_select *s, uint8_t **d) {
-	XImage	*image;
-	int32_t	x, y,
-			w, h;
-
-	x = min(s->x0, s->x1);
-	y = min(s->y0, s->y1);
-	w = abs(s->x1 - s->x0);
-	if (!w) { w++; }
-	h = abs(s->y1 - s->y0);
-	if (!h) { h++; }
-
-	image = XGetImage(
-		s->dsp, s->root_id,
-		x, y, w, h,
-		AllPlanes,
-		ZPixmap
-	);
-	if (!image) {
-		return (false);
-	}
-
-	(*d) = (uint8_t *) calloc(w * h + 1, sizeof(uint32_t));
-	if (!(*d)) {
-		XDestroyImage(image);
-		return (false);
-	}
-
-	for (size_t i = 0, s = w * h * sizeof(uint8_t); i < s; i += 4) {
-		(*d)[i + 3] = image->data[i + 2]; 
-		(*d)[i + 2] = image->data[i + 1];
-		(*d)[i + 1] = image->data[i + 0];
-		(*d)[i + 0] = 0xff; /* let's ensure that every pixel caught is opaque */
-	}
-
-	XDestroyImage(image);
 	return (true);
 }
 
