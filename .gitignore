@@ -11,6 +11,9 @@
 *.o
 *.obj
 
+# exec
+xcolpic
+
 # editor files
 *.swp
 *.swo
