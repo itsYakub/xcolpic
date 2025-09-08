@@ -27,10 +27,10 @@ struct s_select {
 	int32_t	y1;
 };
 
-bool	x_select(int32_t *, int32_t *, int32_t *, int32_t *, uint32_t **);
+bool	x_select(int32_t *, int32_t *, int32_t *, int32_t *, uint8_t **);
 bool	x_selectCreate(struct s_select *);
 bool	x_selectPollEvents(struct s_select *);
-bool	x_selectGetPixelData(struct s_select *, uint32_t **);
+bool	x_selectGetPixelData(struct s_select *, uint8_t **);
 bool	x_selectTerminate(struct s_select *);
 
 /* TODO(yakub):
@@ -46,24 +46,37 @@ bool	x_selectTerminate(struct s_select *);
  *  - help;
  * */
 int	main(int ac, char **av) {
-	uint32_t	*d0, *d1; /* d0 - unfiltered data, d1 - filtered data */
+	uint32_t	*d_int;   /* d_int - data (int) */
+	uint8_t		*d_char;   /* d_char - data (char) */
 	int32_t		x0, x1,   /* x0 - start x, x1 - end x */
 				y0, y1;   /* y0 - start y, y1 - end y */
 
 	x0 = x1 = y0 = y1 = 0;
-	d0 = d1 = 0;
-	if (!x_select(&x0, &y0, &x1, &y1, &d0)) {
+	d_int = 0;
+	d_char = 0;
+	if (!x_select(&x0, &y0, &x1, &y1, &d_char)) {
 		return (1);
 	}
 
 	/* TODO(yakub):
 	 *  We should print only the filtered pixels
 	 * */
-	for (size_t i = 0; d0[i]; i++) {
-		printf("%x\n", d0[i]);
+	d_int = (uint32_t *) d_char;
+	for (size_t i = 0; d_int[i]; i++) {
+		bool	skip;
+
+		skip = false;
+		for (size_t j = i; j > 0; j--) {
+			if (d_int[i] == d_int[j] && i != j) {
+				skip = true;
+				break;
+			}
+		}
+		if (skip) { continue; }
+
+		printf("%x\n", d_int[i]);
 	}
-	if (d0) { free(d0), d0 = 0; }
-	if (d1) { free(d1), d1 = 0; }
+	if (d_char) { free(d_char), d_char = 0; }
 	return (0);
 }
 
@@ -74,7 +87,7 @@ int	main(int ac, char **av) {
  * - y1: returns the Y coordinate of where the selection finished;
  * - d:  returns an RGBA pixel data of the selected region;
  * */
-bool	x_select(int32_t *x0, int32_t *y0, int32_t *x1, int32_t *y1, uint32_t **d) {
+bool	x_select(int32_t *x0, int32_t *y0, int32_t *x1, int32_t *y1, uint8_t **d) {
 	struct s_select	s = { 0 };
 
 	if (!x_selectCreate(&s)) { return (false); }
@@ -179,7 +192,7 @@ bool	x_selectPollEvents(struct s_select *s) {
 }
 
 
-bool	x_selectGetPixelData(struct s_select *s, uint32_t **d) {
+bool	x_selectGetPixelData(struct s_select *s, uint8_t **d) {
 	XImage	*image;
 	int32_t	x, y,
 			w, h;
@@ -201,20 +214,17 @@ bool	x_selectGetPixelData(struct s_select *s, uint32_t **d) {
 		return (false);
 	}
 
-	(*d) = (uint32_t *) calloc(w * h + 1, sizeof(uint32_t));
+	(*d) = (uint8_t *) calloc(w * h + 1, sizeof(uint32_t));
 	if (!(*d)) {
 		XDestroyImage(image);
 		return (false);
 	}
 
-	for (size_t i = 0, s = w * h; i < s; i++) {
-		char	pixel[4];
-        
-		pixel[3] = image->data[2]; 
-		pixel[2] = image->data[1];
-		pixel[1] = image->data[0];
-		pixel[0] = 0xff; /* let's ensure that every pixel caught is opaque */
-		(*d)[i] = *((uint32_t *) pixel);
+	for (size_t i = 0, s = w * h * sizeof(uint8_t); i < s; i += 4) {
+		(*d)[i + 3] = image->data[i + 2]; 
+		(*d)[i + 2] = image->data[i + 1];
+		(*d)[i + 1] = image->data[i + 0];
+		(*d)[i + 0] = 0xff; /* let's ensure that every pixel caught is opaque */
 	}
 
 	XDestroyImage(image);
